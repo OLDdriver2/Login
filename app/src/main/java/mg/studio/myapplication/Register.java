@@ -122,6 +122,10 @@ public class Register extends AppCompatActivity {
         pDialog.setMessage("Registering ...");
         if (!pDialog.isShowing()) pDialog.show();
         //Todo: Need to check Internet connection
+        if(!ConnectionHelper.isConnected(this)) {
+            ConnectionHelper.setNetworkMethod(this);
+            return;
+        }
         new DownloadData().execute(name, email, password);
 
 

@@ -26,6 +26,17 @@ import java.io.Reader;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.security.SecureRandom;
+import java.security.cert.CertificateException;
+import java.security.cert.CertificateFactory;
+import java.security.cert.X509Certificate;
+
+import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSession;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 
 /**
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
@@ -112,7 +123,10 @@ public class Login extends AppCompatActivity {
             loginButton.setClickable(false);
 
             //Todo : ensure the user has Internet connection
-
+            if(!ConnectionHelper.isConnected(this)) {
+                ConnectionHelper.setNetworkMethod(this);
+                return;
+            }
             // Display the progress Dialog
             progressDialog.setMessage("Logging in ...");
             if (!progressDialog.isShowing())
@@ -149,6 +163,31 @@ public class Login extends AppCompatActivity {
      *
      */
 
+    private class MyTrustManager implements X509TrustManager{
+        @Override
+        public void checkClientTrusted(X509Certificate[] chain,String authType)
+                throws CertificateException
+        {
+
+        }
+        @Override
+        public void checkServerTrusted(X509Certificate[] chain,String authType)
+            throws CertificateException
+        {
+
+        }
+        @Override
+        public X509Certificate[] getAcceptedIssuers(){
+            return null;
+        }
+    }
+    private class MyHostnameVerifier implements HostnameVerifier {
+        @Override
+        public boolean verify(String hostname, SSLSession session) {
+            return true;
+        }
+
+    }
 
 
     class OnlineCredentialValidation extends AsyncTask<String, Void, Integer> {
@@ -170,6 +209,54 @@ public class Login extends AppCompatActivity {
             Log.d("TAG","Email and Pass - "+EMAIL + "=" + strings[0] + "&" + PASSWORD + "=" + strings[1]);
 
             URL url = null;
+            HttpsURLConnection connection = null;
+            try{
+                url = new URL(BASE_URL);
+                SSLContext tls = SSLContext.getInstance("TLS");
+                tls.init(null,new TrustManager[]{new MyTrustManager()}, new SecureRandom());
+                HttpsURLConnection.setDefaultSSLSocketFactory(tls.getSocketFactory());
+                HttpsURLConnection.setDefaultHostnameVerifier(new MyHostnameVerifier());
+                connection = (HttpsURLConnection)url.openConnection();
+                connection.setRequestMethod("POST");
+                connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+                connection.setDoOutput(true);
+                // Output the stream to the server
+                request = new OutputStreamWriter(connection.getOutputStream());
+                request.write(PARAMS);
+                request.flush();
+                request.close();
+
+                // Get the inputStream using the same connection
+                InputStream inputStream = new BufferedInputStream(connection.getInputStream());
+                response = readStream(inputStream, 500);
+                inputStream.close();
+
+                // Parsing the response
+                parsingFeedback = parsingResponse(response);
+                // Timeout for reading InputStream arbitrarily set to 3000ms.
+                connection.setReadTimeout(15000);
+                // Timeout for connection.connect() arbitrarily set to 3000ms.
+                connection.setConnectTimeout(15000);
+            }catch (MalformedURLException e) {
+                Log.e("TAG", "URL - " + e);
+                feedback.setError_message(e.toString());
+                return feedback.FAIL;
+            } catch (IOException e) {
+                Log.e("TAG", "openConnection() - " + e);
+                feedback.setError_message(e.toString());
+                return feedback.FAIL;
+            } finally {
+                if (connection != null) // Make sure the connection is not null before disconnecting
+                    connection.disconnect();
+                Log.d("TAG", "Response " + response);
+
+                return parsingFeedback;
+            }
+
+
+
+
+            /*
             HttpURLConnection connection = null;
             try {
                 url = new URL(BASE_URL);
@@ -214,6 +301,7 @@ public class Login extends AppCompatActivity {
 
                 return parsingFeedback;
             }
+            */
         }
 
 
